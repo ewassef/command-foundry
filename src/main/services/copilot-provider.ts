@@ -36,17 +36,21 @@ export class CopilotProvider {
 
   async *run(request: RunRequest): AsyncGenerator<RunEvent> {
     // Health is checked on every run so the desktop app can recover when users
-    // install, upgrade, or authenticate the managed CLI outside the app.
-    const health = await this.ghService.checkHealth();
-    if (!health.cliInstalled) {
-      yield this.failed(request.threadId, this.cliError("CLI_MISSING", "GitHub CLI is missing."));
-      return;
+    // install, upgrade, or authenticate the CLI outside the app.
+    let health = await this.ghService.checkHealth();
+    if (!health.cliInstalled || !health.cliVersion || health.issues.some((issue) => issue.includes("outside the supported range"))) {
+      await this.ghService.ensureInstalled();
+      health = await this.ghService.checkHealth();
     }
-    if (health.cliVersion !== health.pinnedVersion) {
+    if (!health.cliInstalled) {
       yield this.failed(
         request.threadId,
-        this.ghService.createVersionMismatchError(health.cliVersion)
+        this.cliError("CLI_MISSING", "GitHub CLI is missing. Command Foundry can install it automatically when you sign in or start a run.")
       );
+      return;
+    }
+    if (!health.cliVersion || health.issues.some((issue) => issue.includes("outside the supported range"))) {
+      yield this.failed(request.threadId, this.ghService.createVersionMismatchError(health.cliVersion));
       return;
     }
     const copilotReady = health.copilotAvailable || (await this.ghService.ensureCopilotAvailable());

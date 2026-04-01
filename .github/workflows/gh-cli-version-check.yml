@@ -1,0 +1,62 @@
+name: GitHub CLI Version Check
+
+on:
+  schedule:
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh-gh-cli:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Detect latest GitHub CLI version
+        id: refresh
+        run: node scripts/update-gh-cli-manifest.mjs
+
+      - name: Install dependencies
+        if: steps.refresh.outputs.changed == 'true'
+        run: npm ci
+
+      - name: Typecheck
+        if: steps.refresh.outputs.changed == 'true'
+        run: npm run typecheck
+
+      - name: Test
+        if: steps.refresh.outputs.changed == 'true'
+        run: npm run test
+
+      - name: Build
+        if: steps.refresh.outputs.changed == 'true'
+        run: npm run build
+
+      - name: Create upgrade pull request
+        if: steps.refresh.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: refresh GitHub CLI runtime to v${{ steps.refresh.outputs.latest_version }}"
+          branch: automation/gh-cli-refresh
+          delete-branch: true
+          title: "chore: refresh GitHub CLI runtime to v${{ steps.refresh.outputs.latest_version }}"
+          body: |
+            This automated update refreshes Command Foundry's recommended managed GitHub CLI runtime to `v${{ steps.refresh.outputs.latest_version }}`.
+
+            What changed:
+            - updated the managed download target in `src/shared/version-manifest.ts`
+            - kept the supported runtime range policy intact
+            - verified the app with typecheck, tests, and production build
+
+            The normal PR validation workflow will run again on this branch before merge.

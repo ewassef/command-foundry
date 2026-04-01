@@ -114,9 +114,10 @@ export type RunEvent =
 export interface ProviderHealth {
   cliInstalled: boolean;
   cliVersion?: string;
-  // pinnedVersion is what the desktop app expects for the current release,
-  // not simply whatever happens to be available on the machine.
-  pinnedVersion: string;
+  minimumSupportedVersion: string;
+  recommendedVersion: string;
+  supportedVersionRange: string;
+  cliManagedByApp: boolean;
   copilotAvailable: boolean;
   isElevated?: boolean;
   authState: AuthState;
@@ -215,7 +216,9 @@ export interface UserFacingError {
 }
 
 export interface VersionManifest {
-  ghVersion: string;
+  minimumGhVersion: string;
+  recommendedGhVersion: string;
+  supportedGhVersionRange: string;
   copilotCompatibility: string;
   supportedPlatforms: Array<{
     platform: NodeJS.Platform;
