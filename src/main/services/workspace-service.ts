@@ -10,6 +10,8 @@ export class WorkspaceService {
   async loadWorkspace(rootPath: string): Promise<WorkspaceSnapshot> {
     return {
       rootPath,
+      // The explorer is intentionally shallow and bounded so opening a large
+      // repo stays fast enough for a desktop shell bootstrap.
       tree: await this.readDirectory(rootPath, 0)
     };
   }
@@ -21,6 +23,8 @@ export class WorkspaceService {
 
     const entries = await readdir(directoryPath, { withFileTypes: true });
     const sorted = entries
+      // Ignore generated and package-managed directories that add noise but
+      // rarely help the first-pass workspace mental model.
       .filter((entry) => !IGNORED_NAMES.has(entry.name))
       .sort((left, right) => {
         if (left.isDirectory() && !right.isDirectory()) {

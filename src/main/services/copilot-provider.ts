@@ -35,6 +35,8 @@ export class CopilotProvider {
   }
 
   async *run(request: RunRequest): AsyncGenerator<RunEvent> {
+    // Health is checked on every run so the desktop app can recover when users
+    // install, upgrade, or authenticate the managed CLI outside the app.
     const health = await this.ghService.checkHealth();
     if (!health.cliInstalled) {
       yield this.failed(request.threadId, this.cliError("CLI_MISSING", "GitHub CLI is missing."));
@@ -69,6 +71,8 @@ export class CopilotProvider {
     const copilotCommand = await this.ghService.getCopilotCommand();
     const runId = createId();
     const prompt = this.composePrompt(request);
+    // The workspace root is passed both as cwd and as an allowed directory so
+    // Copilot stays anchored to the selected project instead of the app root.
     const runtimeArgs = [
       ...copilotCommand.argsPrefix,
       "--allow-all-tools",
@@ -99,6 +103,8 @@ export class CopilotProvider {
     child.stdout.on("data", (chunk) => {
       const text = chunk.toString();
       stdout += text;
+      // Raw stdout is the source of truth for the transcript, so we surface it
+      // incrementally instead of waiting for the process to finish.
       queue.push({ type: "stdout", runId, chunk: text, timestamp: nowIso() });
     });
 
@@ -173,6 +179,8 @@ export class CopilotProvider {
   }
 
   private composePrompt(request: RunRequest): string {
+    // The provider sends a single flattened prompt today so different CLI
+    // backends can share the same higher-level request contract.
     const contextPrefix = request.summary ? `Conversation summary: ${request.summary}\n\n` : "";
     const attachments = request.attachments
       .filter((attachment) => attachment.included)

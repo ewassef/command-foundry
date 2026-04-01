@@ -87,6 +87,8 @@ export function App() {
   const [promptInput, setPromptInput] = useState("");
 
   useEffect(() => {
+    // Renderer bootstrap intentionally hydrates the whole shell in one step so
+    // the activity bar, header, and flyouts all start from the same snapshot.
     void window.friendlyAgent.bootstrap().then((payload: BootstrapPayload) => {
       setSessions(payload.sessions);
       setHealth(payload.health);
@@ -96,6 +98,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // The last selected workspace is persisted locally because it doubles as
+    // both an explorer root and the default cwd for future CLI runs.
     const savedWorkspace = window.localStorage.getItem(workspaceStorageKey);
     if (!savedWorkspace) {
       return;
@@ -110,6 +114,8 @@ export function App() {
   useEffect(() => {
     return window.friendlyAgent.onRunEvent((event) => {
       const runEvent = event as RunEvent;
+      // Session history is refreshed alongside the live transcript so sidebar
+      // lists and the active thread stay in sync during streaming runs.
       void refreshSessions();
       if (runEvent.type === "prompt") {
         setPendingPrompt({
@@ -163,6 +169,8 @@ export function App() {
     setComposer("");
     setAttachments([]);
     await refreshSessions();
+    // The chat shell always returns to the active run after launching from a
+    // starter prompt, catalog shortcut, or session reopen flow.
     setActiveSessionId(session.id);
     setView("chat");
   }
@@ -260,6 +268,8 @@ export function App() {
   }
 
   function useCatalogItem(item: CatalogItem) {
+    // Catalog entries are prompt accelerators today; they seed the composer
+    // with structured intent while keeping the user in the same chat surface.
     const prompt = item.kind === "skill"
       ? `Use the ${item.title} skill in this workspace. ${item.description}`
       : `Act as the ${item.title} agent for this workspace. ${item.description}`;

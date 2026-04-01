@@ -85,6 +85,8 @@ export class ManagedGhService {
 
   getCliEnvironment(): NodeJS.ProcessEnv {
     const env = { ...process.env };
+    // The desktop app manages stored auth itself; inherited shell tokens can
+    // interfere with gh auth flows and should not bleed into child processes.
     delete env.GITHUB_TOKEN;
     delete env.GH_TOKEN;
     return env;
@@ -118,6 +120,8 @@ export class ManagedGhService {
       throw new Error(`Unsupported platform ${process.platform}/${process.arch}`);
     }
 
+    // GitHub CLI is treated like a managed runtime dependency so every app
+    // release can pin to a tested version.
     const tempArchive = join(tmpdir(), basename(target.downloadUrl));
     await this.downloadFile(target.downloadUrl, tempArchive, target.checksumSha256);
     await this.extractArchive(tempArchive, this.getManagedInstallDir(), target.archiveExtension);
@@ -230,6 +234,8 @@ export class ManagedGhService {
 
     const installDir = this.getManagedCopilotInstallDir();
     await mkdir(installDir, { recursive: true });
+    // Installing via npm keeps the Copilot CLI isolated inside the app runtime
+    // instead of relying on a mutable global user installation.
     const result = await this.runner.run("npm", ["install", "--prefix", installDir, "@github/copilot"], {
       timeoutMs: 5 * 60_000,
       env: this.getCliEnvironment()
