@@ -14,6 +14,8 @@ export interface ContextAttachment {
   type: ContextAttachmentType;
   label: string;
   value: string;
+  // Included lets the UI keep discovered attachments around while still giving
+  // users an explicit opt-in toggle over what actually gets sent to the model.
   included: boolean;
   bytes?: number;
 }
@@ -36,6 +38,8 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   createdAt: string;
+  // rawContent preserves the unformatted CLI output even when the UI later
+  // chooses to render a derived display form.
   rawContent?: string;
   status?: "streaming" | "complete" | "error";
 }
@@ -60,6 +64,8 @@ export interface SessionRecord extends ConversationThread {
 export interface RunRequest {
   threadId: string;
   prompt: string;
+  // summary is a flattened context envelope built by the app before handing
+  // control to the provider-specific runtime.
   summary: string;
   workspaceRoot?: string;
   attachments: ContextAttachment[];
@@ -108,7 +114,10 @@ export type RunEvent =
 export interface ProviderHealth {
   cliInstalled: boolean;
   cliVersion?: string;
-  pinnedVersion: string;
+  minimumSupportedVersion: string;
+  recommendedVersion: string;
+  supportedVersionRange: string;
+  cliManagedByApp: boolean;
   copilotAvailable: boolean;
   isElevated?: boolean;
   authState: AuthState;
@@ -156,6 +165,7 @@ export interface SyncSource {
   title: string;
   type: "git" | "http";
   url: string;
+  // manifestPath is used for git-backed sources after cloning into temp space.
   manifestPath: string;
   branch?: string;
   enabled: boolean;
@@ -206,7 +216,9 @@ export interface UserFacingError {
 }
 
 export interface VersionManifest {
-  ghVersion: string;
+  minimumGhVersion: string;
+  recommendedGhVersion: string;
+  supportedGhVersionRange: string;
   copilotCompatibility: string;
   supportedPlatforms: Array<{
     platform: NodeJS.Platform;
@@ -219,6 +231,8 @@ export interface VersionManifest {
 }
 
 export interface PersistedState {
+  // Everything needed for the desktop shell is stored locally so sessions,
+  // catalog state, and sync history survive app restarts without cloud state.
   sessions: SessionRecord[];
   sources: SyncSource[];
   catalog: CatalogItem[];

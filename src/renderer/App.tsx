@@ -87,6 +87,8 @@ export function App() {
   const [promptInput, setPromptInput] = useState("");
 
   useEffect(() => {
+    // Renderer bootstrap intentionally hydrates the whole shell in one step so
+    // the activity bar, header, and flyouts all start from the same snapshot.
     void window.friendlyAgent.bootstrap().then((payload: BootstrapPayload) => {
       setSessions(payload.sessions);
       setHealth(payload.health);
@@ -96,6 +98,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // The last selected workspace is persisted locally because it doubles as
+    // both an explorer root and the default cwd for future CLI runs.
     const savedWorkspace = window.localStorage.getItem(workspaceStorageKey);
     if (!savedWorkspace) {
       return;
@@ -110,6 +114,8 @@ export function App() {
   useEffect(() => {
     return window.friendlyAgent.onRunEvent((event) => {
       const runEvent = event as RunEvent;
+      // Session history is refreshed alongside the live transcript so sidebar
+      // lists and the active thread stay in sync during streaming runs.
       void refreshSessions();
       if (runEvent.type === "prompt") {
         setPendingPrompt({
@@ -163,13 +169,19 @@ export function App() {
     setComposer("");
     setAttachments([]);
     await refreshSessions();
+    // The chat shell always returns to the active run after launching from a
+    // starter prompt, catalog shortcut, or session reopen flow.
     setActiveSessionId(session.id);
     setView("chat");
   }
 
   async function startLogin() {
     setBusy(true);
-    setAuthNotice("Opening GitHub sign-in. If a one-time code is copied to your clipboard, paste it at https://github.com/login/device.");
+    setAuthNotice(
+      health?.cliInstalled
+        ? "Opening GitHub CLI sign-in. If a one-time code is copied to your clipboard, paste it at https://github.com/login/device."
+        : "GitHub CLI is not installed yet. Command Foundry will download a supported version, then hand off sign-in to the CLI."
+    );
     try {
       const nextAuth = (await window.friendlyAgent.startLogin()) as ProviderHealth["authState"];
       const providerHealth = (await window.friendlyAgent.checkProviderHealth()) as ProviderHealth;
@@ -260,6 +272,8 @@ export function App() {
   }
 
   function useCatalogItem(item: CatalogItem) {
+    // Catalog entries are prompt accelerators today; they seed the composer
+    // with structured intent while keeping the user in the same chat surface.
     const prompt = item.kind === "skill"
       ? `Use the ${item.title} skill in this workspace. ${item.description}`
       : `Act as the ${item.title} agent for this workspace. ${item.description}`;
@@ -358,6 +372,7 @@ export function App() {
                   </div>
                   <div className="space-y-2 text-sm text-[#5d5d5d]">
                     <div className="flex items-center justify-between"><span>CLI</span><strong className="font-medium text-[#1f1f1f]">{health?.cliVersion ?? "not found"}</strong></div>
+                    <div className="flex items-center justify-between"><span>Support</span><strong className="font-medium text-[#1f1f1f]">{health?.supportedVersionRange ?? "checking"}</strong></div>
                     <div className="flex items-center justify-between"><span>Copilot</span><strong className="font-medium text-[#1f1f1f]">{health?.copilotAvailable ? "Ready" : "Needs setup"}</strong></div>
                     <div className="flex items-center justify-between"><span>Context</span><strong className="font-medium text-[#1f1f1f]">{attachmentCount}</strong></div>
                   </div>
@@ -413,11 +428,12 @@ export function App() {
                 <p className="mt-1 text-sm text-[#666]">{view === "chat" ? "Workspace-bound CLI output streams directly into the transcript." : view === "sessions" ? "Reopen earlier runs and continue from the same workspace context." : "Browse reusable skills, agents, MCP integrations, and sync sources."}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <HeaderChip>{health?.cliVersion ?? "CLI checking"}</HeaderChip>
+                <HeaderChip>{health?.cliVersion ? `gh ${health.cliVersion}` : "CLI checking"}</HeaderChip>
+                <HeaderChip>{health?.cliManagedByApp ? "Managed runtime" : "Local runtime"}</HeaderChip>
                 <HeaderChip>{health?.authState.status === "authenticated" ? "GitHub connected" : "Login needed"}</HeaderChip>
                 <HeaderChip>{busy ? "Running" : "Ready"}</HeaderChip>
                 <HeaderChip>{health?.isElevated ? "Admin mode" : "Standard mode"}</HeaderChip>
-                <button className="rounded-lg border border-[#d8d8d8] bg-white px-3 py-2 text-sm font-medium text-[#2a2a2a] hover:bg-[#fafafa]" onClick={() => void startLogin()} disabled={busy}>Sign in</button>
+                <button className="rounded-lg border border-[#d8d8d8] bg-white px-3 py-2 text-sm font-medium text-[#2a2a2a] hover:bg-[#fafafa]" onClick={() => void startLogin()} disabled={busy}>{health?.cliInstalled ? "Sign in" : "Install CLI & sign in"}</button>
                 {!health?.isElevated && <button className="rounded-lg border border-[#d8d8d8] bg-white px-3 py-2 text-sm font-medium text-[#2a2a2a] hover:bg-[#fafafa]" onClick={() => void relaunchElevated()}>Run as admin</button>}
               </div>
             </header>

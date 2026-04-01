@@ -18,6 +18,8 @@ export function registerIpcHandlers(
     workspaceService: WorkspaceService;
   }
 ): void {
+  // Bootstrap lets the renderer paint immediately with sessions, provider
+  // health, and catalog state from a single round-trip.
   ipcMain.handle(ipcChannels.appBootstrap, async () => {
     const [sessions, health, catalog] = await Promise.all([
       services.sessionStore.listSessions(),
@@ -32,6 +34,8 @@ export function registerIpcHandlers(
       return false;
     }
 
+    // Relaunching the whole app as admin is more reliable than trying to
+    // selectively elevate child processes mid-session.
     const appPath = app.getAppPath();
     const args = process.defaultApp ? [appPath] : [];
     const extraArgs = process.argv.slice(process.defaultApp ? 2 : 1).filter((arg) => arg !== "--inspect");
@@ -76,6 +80,8 @@ export function registerIpcHandlers(
         workspaceRoot?: string;
       }
     ) => {
+      // User messages are persisted before the provider starts so the session
+      // list reflects in-flight work even if the run later fails.
       const session = request.threadId
         ? await services.sessionStore.appendUserMessage(
             request.threadId,
@@ -101,6 +107,8 @@ export function registerIpcHandlers(
         attachments: request.attachments
       };
 
+      // Provider events are streamed back to the renderer while also updating
+      // the durable session record that powers history/reopen flows.
       void (async () => {
         try {
           for await (const runEvent of services.provider.run(runRequest)) {
@@ -141,6 +149,8 @@ export function registerIpcHandlers(
   ipcMain.handle(ipcChannels.providerLogin, async () => services.provider.startLogin());
 
   ipcMain.handle(ipcChannels.contextPickFiles, async () => {
+    // Attachments are kept explicit so the renderer can always show the user
+    // exactly what extra context is being sent to the CLI.
     const result = await dialog.showOpenDialog(window, {
       properties: ["openFile", "multiSelections"]
     });
@@ -167,6 +177,8 @@ export function registerIpcHandlers(
   });
 
   ipcMain.handle(ipcChannels.workspacePick, async () => {
+    // Workspaces are treated differently from generic folder attachments:
+    // they define the CLI cwd and drive the explorer view.
     const result = await dialog.showOpenDialog(window, {
       properties: ["openDirectory"]
     });

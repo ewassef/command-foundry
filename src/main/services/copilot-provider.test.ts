@@ -8,8 +8,11 @@ describe("CopilotProvider", () => {
       checkHealth: async () =>
         ({
           cliInstalled: true,
-          cliVersion: "2.88.1",
-          pinnedVersion: "2.88.1",
+          cliVersion: "2.89.0",
+          minimumSupportedVersion: "2.88.1",
+          recommendedVersion: "2.89.0",
+          supportedVersionRange: ">=2.88.1 <3.0.0",
+          cliManagedByApp: false,
           copilotAvailable: true,
           authState: {
             status: "unauthenticated",
@@ -20,6 +23,7 @@ describe("CopilotProvider", () => {
           issues: ["GitHub authentication is required."]
         }) satisfies ProviderHealth,
       createVersionMismatchError: vi.fn(),
+      ensureInstalled: vi.fn(),
       getCliPathForChecks: vi.fn(),
       checkAuthState: vi.fn(),
       startLogin: vi.fn()

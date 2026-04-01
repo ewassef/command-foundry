@@ -5,7 +5,6 @@ import { get } from "node:https";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { spawn } from "node:child_process";
-import { shell } from "electron";
 import type { AuthState, ProviderHealth, UserFacingError, VersionManifest } from "@shared/types";
 import { versionManifest } from "@shared/version-manifest";
 import { nowIso } from "./utils";
@@ -80,11 +79,13 @@ export class ManagedGhService {
   }
 
   getManagedInstallDir(): string {
-    return join(this.userDataPath, "runtime", "gh", this.manifest.ghVersion);
+    return join(this.userDataPath, "runtime", "gh", this.manifest.recommendedGhVersion);
   }
 
   getCliEnvironment(): NodeJS.ProcessEnv {
     const env = { ...process.env };
+    // The desktop app manages stored auth itself; inherited shell tokens can
+    // interfere with gh auth flows and should not bleed into child processes.
     delete env.GITHUB_TOKEN;
     delete env.GH_TOKEN;
     return env;
@@ -108,9 +109,15 @@ export class ManagedGhService {
   }
 
   async ensureInstalled(): Promise<string> {
-    const existing = await this.findUsableBinary();
-    if (existing.path && existing.version === this.manifest.ghVersion) {
-      return existing.path;
+    const usable = await this.findUsableBinary();
+    if (usable.path && usable.version && this.isSupportedVersion(usable.version)) {
+      return usable.path;
+    }
+
+    const managedPath = this.getManagedBinaryPath();
+    const managed = await this.tryVersion(managedPath);
+    if (managed.version && this.isSupportedVersion(managed.version)) {
+      return managedPath;
     }
 
     const target = this.findSupportedPlatform();
@@ -118,6 +125,8 @@ export class ManagedGhService {
       throw new Error(`Unsupported platform ${process.platform}/${process.arch}`);
     }
 
+    // GitHub CLI is treated like a managed runtime dependency so every app
+    // release can pin to a tested version.
     const tempArchive = join(tmpdir(), basename(target.downloadUrl));
     await this.downloadFile(target.downloadUrl, tempArchive, target.checksumSha256);
     await this.extractArchive(tempArchive, this.getManagedInstallDir(), target.archiveExtension);
@@ -185,9 +194,9 @@ export class ManagedGhService {
 
     if (!usable.path) {
       issues.push("GitHub CLI is not installed.");
-    } else if (usable.version !== this.manifest.ghVersion) {
+    } else if (!usable.version || !this.isSupportedVersion(usable.version)) {
       issues.push(
-        `GitHub CLI version ${usable.version ?? "unknown"} does not match the pinned version ${this.manifest.ghVersion}.`
+        `GitHub CLI version ${usable.version ?? "unknown"} is outside the supported range ${this.manifest.supportedGhVersionRange}.`
       );
     }
 
@@ -203,7 +212,10 @@ export class ManagedGhService {
     return {
       cliInstalled: Boolean(usable.path),
       cliVersion: usable.version,
-      pinnedVersion: this.manifest.ghVersion,
+      minimumSupportedVersion: this.manifest.minimumGhVersion,
+      recommendedVersion: this.manifest.recommendedGhVersion,
+      supportedVersionRange: this.manifest.supportedGhVersionRange,
+      cliManagedByApp: usable.path === this.getManagedBinaryPath(),
       copilotAvailable,
       isElevated: this.isElevated(),
       authState,
@@ -216,7 +228,7 @@ export class ManagedGhService {
 
   async getCliPathForChecks(): Promise<string> {
     const usable = await this.findUsableBinary();
-    if (usable.path) {
+    if (usable.path && usable.version && this.isSupportedVersion(usable.version)) {
       return usable.path;
     }
     return this.ensureInstalled();
@@ -230,6 +242,8 @@ export class ManagedGhService {
 
     const installDir = this.getManagedCopilotInstallDir();
     await mkdir(installDir, { recursive: true });
+    // Installing via npm keeps the Copilot CLI isolated inside the app runtime
+    // instead of relying on a mutable global user installation.
     const result = await this.runner.run("npm", ["install", "--prefix", installDir, "@github/copilot"], {
       timeoutMs: 5 * 60_000,
       env: this.getCliEnvironment()
@@ -255,7 +269,7 @@ export class ManagedGhService {
     return {
       code: "CLI_VERSION_MISMATCH",
       title: "Unsupported GitHub CLI version",
-      message: `Command Foundry is pinned to GitHub CLI ${this.manifest.ghVersion}, but found ${currentVersion ?? "an unknown version"}.`,
+      message: `Command Foundry supports GitHub CLI ${this.manifest.supportedGhVersionRange}, but found ${currentVersion ?? "an unknown version"}.`,
       recoverable: true
     };
   }
@@ -263,7 +277,7 @@ export class ManagedGhService {
   private async findUsableBinary(): Promise<{ path?: string; version?: string }> {
     const managedPath = this.getManagedBinaryPath();
     const managed = await this.tryVersion(managedPath);
-    if (managed.version) {
+    if (managed.version && this.isSupportedVersion(managed.version)) {
       return { path: managedPath, version: managed.version };
     }
 
@@ -271,15 +285,48 @@ export class ManagedGhService {
     const systemLookup = await this.runner.run(systemCommand, ["gh"]).catch(() => undefined);
     const systemPath = systemLookup?.stdout.split(/\r?\n/).find(Boolean)?.trim();
     if (!systemPath) {
+      if (managed.version) {
+        return { path: managedPath, version: managed.version };
+      }
       return {};
     }
 
     const system = await this.tryVersion(systemPath);
+    if (system.version && this.isSupportedVersion(system.version)) {
+      return { path: systemPath, version: system.version };
+    }
+
+    if (managed.version) {
+      return { path: managedPath, version: managed.version };
+    }
+
     if (system.version) {
       return { path: systemPath, version: system.version };
     }
 
     return {};
+  }
+
+  private isSupportedVersion(version: string): boolean {
+    const minimumComparison = this.compareVersions(version, this.manifest.minimumGhVersion);
+    const runtimeMajor = Number.parseInt(version.split(".")[0] ?? "0", 10);
+    const supportedMajor = Number.parseInt(this.manifest.recommendedGhVersion.split(".")[0] ?? "0", 10);
+    return minimumComparison >= 0 && runtimeMajor === supportedMajor;
+  }
+
+  private compareVersions(left: string, right: string): number {
+    const leftParts = left.split(".").map((part) => Number.parseInt(part, 10) || 0);
+    const rightParts = right.split(".").map((part) => Number.parseInt(part, 10) || 0);
+    const maxLength = Math.max(leftParts.length, rightParts.length);
+
+    for (let index = 0; index < maxLength; index += 1) {
+      const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+      if (diff !== 0) {
+        return diff > 0 ? 1 : -1;
+      }
+    }
+
+    return 0;
   }
 
   private async tryVersion(binaryPath: string): Promise<{ version?: string }> {
@@ -398,7 +445,6 @@ export class ManagedGhService {
       let settled = false;
       let output = "";
       let enterSent = false;
-      let browserOpened = false;
       const timeout = setTimeout(() => {
         if (!settled) {
           child.kill();
@@ -414,13 +460,13 @@ export class ManagedGhService {
           enterSent = true;
         }
 
-        const codeMatch = output.match(/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/);
-        if (codeMatch) {
-          this.pendingAuthNotice = `Paste code ${codeMatch[0]} at https://github.com/login/device`;
-          if (!browserOpened) {
-            browserOpened = true;
-            void shell.openExternal("https://github.com/login/device");
-          }
+        const latestLine = output
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .at(-1);
+        if (latestLine) {
+          this.pendingAuthNotice = latestLine;
         }
       };
 

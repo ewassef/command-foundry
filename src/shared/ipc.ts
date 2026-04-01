@@ -1,4 +1,6 @@
 export const ipcChannels = {
+  // Keep renderer/main channel names centralized so the preload bridge and the
+  // Electron handlers evolve together without stringly-typed drift.
   appBootstrap: "app:bootstrap",
   appRelaunchElevated: "app:relaunch-elevated",
   chatSendMessage: "chat:send-message",

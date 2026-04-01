@@ -19,7 +19,7 @@ class FakeRunner implements ProcessRunner {
   }
 }
 
-async function createManagedGhFixture(version = "2.88.1") {
+async function createManagedGhFixture(version = "2.89.0") {
   const dir = await mkdtemp(join(tmpdir(), "friendly-agent-gh-test-"));
   tempDirs.push(dir);
   const binaryDir = join(dir, "runtime", "gh", version, `gh_${version}_windows_amd64`, "bin");
@@ -30,7 +30,9 @@ async function createManagedGhFixture(version = "2.88.1") {
 }
 
 const manifest: VersionManifest = {
-  ghVersion: "2.88.1",
+  minimumGhVersion: "2.88.1",
+  recommendedGhVersion: "2.89.0",
+  supportedGhVersionRange: ">=2.88.1 <3.0.0",
   copilotCompatibility: "test",
   supportedPlatforms: [
     {
@@ -38,7 +40,7 @@ const manifest: VersionManifest = {
       arch: process.arch,
       archiveExtension: "zip",
       downloadUrl: "https://example.com/gh.zip",
-      binaryRelativePath: "gh_2.88.1_windows_amd64/bin/gh.exe"
+      binaryRelativePath: "gh_2.89.0_windows_amd64/bin/gh.exe"
     }
   ]
 };
@@ -47,7 +49,7 @@ describe("ManagedGhService", () => {
   it("reports a healthy pinned install when version, copilot, and auth are valid", async () => {
     const { dir, binaryPath } = await createManagedGhFixture();
     const runner = new FakeRunner({
-      [`${binaryPath} --version`]: { code: 0, stdout: "gh version 2.88.1", stderr: "" },
+      [`${binaryPath} --version`]: { code: 0, stdout: "gh version 2.89.0", stderr: "" },
       [`${binaryPath} help copilot`]: { code: 0, stdout: "copilot help", stderr: "" },
       [`${binaryPath} auth status`]: {
         code: 0,
@@ -59,13 +61,13 @@ describe("ManagedGhService", () => {
 
     const health = await service.checkHealth();
     expect(health.cliInstalled).toBe(true);
-    expect(health.cliVersion).toBe("2.88.1");
+    expect(health.cliVersion).toBe("2.89.0");
     expect(health.authState.status).toBe("authenticated");
     expect(health.issues).toEqual([]);
   });
 
-  it("flags version mismatch when the discovered cli version differs from the pin", async () => {
-    const { dir, binaryPath } = await createManagedGhFixture("2.88.1");
+  it("flags unsupported versions outside the accepted range", async () => {
+    const { dir, binaryPath } = await createManagedGhFixture("2.89.0");
     const runner = new FakeRunner({
       [`${binaryPath} --version`]: { code: 0, stdout: "gh version 2.87.0", stderr: "" },
       [`${binaryPath} help copilot`]: { code: 0, stdout: "copilot help", stderr: "" },
@@ -74,6 +76,6 @@ describe("ManagedGhService", () => {
     const service = new ManagedGhService(dir, runner, manifest);
 
     const health = await service.checkHealth();
-    expect(health.issues.join(" ")).toContain("does not match the pinned version");
+    expect(health.issues.join(" ")).toContain("outside the supported range");
   });
 });

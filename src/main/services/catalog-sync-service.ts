@@ -44,6 +44,8 @@ export class CatalogSyncService {
     await this.store.writeState(state);
 
     try {
+      // A sync updates both the source metadata and the catalog surface the UI
+      // renders, so the source and resulting items are persisted together.
       const manifest = await this.fetchManifest(source);
       const items = this.toCatalogItems(source, manifest);
       state.catalog = this.mergeCatalog(state.catalog, items, source.id);
@@ -89,6 +91,8 @@ export class CatalogSyncService {
     }
 
     const timer = setInterval(() => {
+      // Background sync is intentionally fire-and-forget; failures are recorded
+      // in sync jobs and source metadata instead of crashing the app shell.
       void this.syncSource(source.id).catch(() => undefined);
     }, source.syncIntervalMinutes * 60 * 1000);
 
@@ -106,6 +110,8 @@ export class CatalogSyncService {
 
     const workingDir = await mkdtemp(join(tmpdir(), "friendly-agent-sync-"));
     try {
+      // Git-backed sources are cloned into a temp workspace so manifests can be
+      // read without mutating the user's actual project directories.
       await this.runGitClone(source, workingDir);
       const manifestFile = join(workingDir, source.manifestPath);
       const content = await readFile(manifestFile, "utf8");
@@ -181,6 +187,8 @@ export class CatalogSyncService {
   }
 
   private mergeCatalog(current: CatalogItem[], incoming: CatalogItem[], sourceId: string): CatalogItem[] {
+    // Replacing items source-by-source keeps built-ins and other upstream feeds
+    // intact while letting each synced source fully own its own entries.
     const preserved = current.filter((item) => item.sourceId !== sourceId);
     return [...incoming, ...preserved].sort((a, b) => a.title.localeCompare(b.title));
   }

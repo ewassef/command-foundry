@@ -12,6 +12,8 @@ async function bootstrap() {
   await app.whenReady();
 
   const userData = app.getPath("userData");
+  // Main-process services share the same userData root so runtime state,
+  // managed CLI assets, and persisted sessions all move together.
   const sessionStore = new SessionStore(userData);
   const ghService = new ManagedGhService(userData);
   const provider = new CopilotProvider(ghService);
@@ -20,6 +22,8 @@ async function bootstrap() {
   const workspaceService = new WorkspaceService();
 
   const window = createMainWindow();
+  // The preload bridge stays intentionally thin; all privileged work is routed
+  // through these handlers instead of exposing Node APIs to the renderer.
   registerIpcHandlers(window, {
     provider,
     sessionStore,

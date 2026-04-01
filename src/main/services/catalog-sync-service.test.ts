@@ -16,6 +16,21 @@ async function createServices() {
   const dir = await mkdtemp(join(tmpdir(), "friendly-agent-catalog-test-"));
   tempDirs.push(dir);
   const store = new SessionStore(dir);
+  const state = await store.readState();
+  state.sources = [
+    {
+      id: "http-test-source",
+      title: "HTTP Test Source",
+      type: "http",
+      url: "https://example.com/catalog.json",
+      manifestPath: "catalog.json",
+      enabled: true,
+      syncIntervalMinutes: 60
+    }
+  ];
+  state.catalog = [];
+  state.syncJobs = [];
+  await store.writeState(state);
   const catalog = new CatalogSyncService(store);
   return { store, catalog };
 }
@@ -45,10 +60,10 @@ describe("CatalogSyncService", () => {
       }))
     );
 
-    await catalog.syncSource("default-friendly-catalog");
+    await catalog.syncSource("http-test-source");
     const result = await catalog.listCatalog();
-    expect(result.items).toHaveLength(1);
-    expect(result.items[0]?.title).toBe("Excel Maker");
-    expect(result.items[0]?.status).toBe("available");
+    const syncedItem = result.items.find((item) => item.id === "excel-skill");
+    expect(syncedItem?.title).toBe("Excel Maker");
+    expect(syncedItem?.status).toBe("available");
   });
 });

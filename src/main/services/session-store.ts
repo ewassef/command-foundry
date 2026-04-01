@@ -96,6 +96,8 @@ export class SessionStore {
     const state = await this.store.read();
     let changed = false;
 
+    // Built-in sources and catalog items are merged on read so older local
+    // state files can pick up new defaults without a one-off migration step.
     const defaultSources = defaultState().sources;
     for (const source of defaultSources) {
       if (!state.sources.some((existing) => existing.id === source.id)) {
@@ -190,6 +192,8 @@ export class SessionStore {
     session.messages = [...session.messages, userMessage];
     session.attachments = attachments;
     session.workspaceRoot = workspaceRoot ?? session.workspaceRoot;
+    // Session titles are only taken from the first prompt; after that the list
+    // should remain stable even as the conversation evolves.
     session.title = session.messages.length === 1 ? summarizeText(prompt, 48) : session.title;
     session.summary = summarizeText(prompt, 120);
     session.updatedAt = nowIso();
@@ -214,6 +218,8 @@ export class SessionStore {
     if (event.type === "stdout" || event.type === "stderr") {
       const lastMessage = session.messages.at(-1);
       const chunk = event.chunk;
+      // Streaming chunks are folded into the latest assistant message so the
+      // transcript mirrors the live CLI session rather than a log viewer.
       if (lastMessage?.role === "assistant" && lastMessage.status === "streaming") {
         lastMessage.content = `${lastMessage.content}${chunk}`;
         lastMessage.rawContent = `${lastMessage.rawContent ?? ""}${chunk}`;
@@ -273,6 +279,8 @@ export class SessionStore {
     messageStatus: ChatMessage["status"],
     sessionStatus: SessionStatus
   ): void {
+    // Completion and failure both finalize the assistant surface through the
+    // same helper so history rendering stays consistent across run outcomes.
     const lastMessage = session.messages.at(-1);
     if (lastMessage?.role === "assistant") {
       lastMessage.content = content;
