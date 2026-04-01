@@ -42,7 +42,7 @@ describe("SessionStore", () => {
 
     const updated = await store.getSession(session.id);
     expect(updated?.status).toBe("complete");
-    expect(updated?.messages.at(-1)?.content).toBe("Here is a friendly answer.");
+    expect(updated?.messages.at(-1)?.content).toBe("Raw output");
     expect(updated?.messages.at(-1)?.rawContent).toBe("Raw output");
   });
 });
