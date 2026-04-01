@@ -1,0 +1,68 @@
+{
+  "name": "command-foundry",
+  "version": "0.1.0",
+  "description": "Electron workspace for running Copilot CLI today and multiple coding agents over time through one unified interface.",
+  "main": "dist/main/index.cjs",
+  "author": "OpenAI Codex",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:renderer": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:main": "tsup --watch --onSuccess \"echo main-built\"",
+    "dev:electron": "wait-on tcp:5173 file:dist/main/index.cjs && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
+    "build": "npm run clean && npm run typecheck && npm run build:main && npm run build:renderer",
+    "build:main": "tsup",
+    "build:renderer": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rimraf dist release"
+  },
+  "dependencies": {
+    "@github/copilot": "^1.0.11",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^22.13.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^35.0.1",
+    "electron-builder": "^25.1.8",
+    "rimraf": "^6.0.1",
+    "tailwindcss": "^4.2.2",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.1",
+    "vitest": "^3.0.9",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "appId": "com.openai.commandfoundry",
+    "productName": "Command Foundry",
+    "icon": "assets/app-icon.ico",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets",
+      "output": "release"
+    },
+    "extraMetadata": {
+      "main": "dist/main/index.cjs"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "win": {
+      "icon": "assets/app-icon.ico"
+    }
+  }
+}

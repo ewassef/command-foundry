@@ -1,0 +1,13 @@
+node_modules/
+dist/
+release/
+.DS_Store
+Thumbs.db
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.*
+.tmp-copilot-prefix/
+.tmp-copilot-test/
